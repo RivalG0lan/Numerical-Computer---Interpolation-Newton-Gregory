@@ -1,52 +1,42 @@
 """
-interpolasi/newton_maju.py — Interpolasi Newton Forward (Selisih Maju)
-=======================================================================
+interpolasi/newton_mundur.py — Interpolasi Newton Backward (Selisih Mundur)
+============================================================================
 Mata Kuliah: Komputasi Numerik
 
-Newton Forward Interpolation menggunakan tabel selisih maju (forward difference table)
-untuk mengestimasi nilai fungsi. Metode ini cocok ketika titik x yang dicari
-terletak di dekat awal data (x ≈ x0).
+Newton Backward Interpolation menggunakan tabel selisih mundur (backward difference table).
+Metode ini cocok ketika titik x yang dicari terletak di dekat AKHIR data (x ≈ xn).
 
-Rumus Newton-Gregory Forward:
-    P(x) = y0 + u*Δy0 + [u(u-1)/2!]*Δ²y0 + [u(u-1)(u-2)/3!]*Δ³y0 + ...
+Rumus Newton-Gregory Backward:
+    P(x) = yn + u*∇yn + [u(u+1)/2!]*∇²yn + [u(u+1)(u+2)/3!]*∇³yn + ...
 
 di mana:
-    u = (x - x0) / h         ← parameter tak-berdimensi
-    h = jarak antar titik x  ← harus konstan (equal spacing)
-    Δ^k y0 = selisih maju orde ke-k pada titik pertama
+    u  = (x - xn) / h        ← bernilai negatif jika x < xn
+    h  = jarak antar titik x ← harus konstan (equal spacing)
+    ∇^k yn = selisih mundur orde ke-k pada titik TERAKHIR
 
-Tabel Selisih Maju:
-    Δy_i   = y_{i+1} - y_i
-    Δ²y_i  = Δy_{i+1} - Δy_i
-    Δ³y_i  = Δ²y_{i+1} - Δ²y_i
+Tabel Selisih Mundur:
+    ∇y_i  = y_i - y_{i-1}
+    ∇²y_i = ∇y_i - ∇y_{i-1}
     ... dst
 
-Syarat: jarak antar x harus sama persis (equal spacing/equidistant nodes).
-
-Keunggulan:
-    - Efisien untuk data dengan jarak sama
-    - Mudah diperluas ke orde lebih tinggi dengan menambah titik
-
-Kelemahan:
-    - Tidak bisa digunakan jika jarak x tidak sama
-    - Akurasi turun jika x yang dicari jauh dari x0
+Perbedaan dengan Newton Forward:
+    Forward  → pakai Δ (selisih maju), ambil elemen PERTAMA tiap orde
+    Backward → pakai ∇ (selisih mundur), ambil elemen TERAKHIR tiap orde
 """
 
-from utils.tabel_perbedaan import forward_difference_table
 
-
-def newton_forward(x, y, xp, verbose=False):
+def newton_backward(x, y, xp, verbose=False):
     """
-    Hitung nilai interpolasi Newton Forward P(xp).
+    Hitung nilai interpolasi Newton Backward P(xp).
 
     Parameter:
-        x       : list of float — titik-titik x yang diketahui (harus equal spacing)
+        x       : list of float — titik-titik x (harus equal spacing, sudah terurut)
         y       : list of float — nilai fungsi di titik-titik x
         xp      : float — nilai x yang ingin dicari P(xp)-nya
         verbose : bool — jika True, cetak langkah perhitungan detail
 
     Return:
-        (result, df) — nilai P(xp) dan DataFrame tabel selisih maju
+        float — nilai P(xp)
 
     Raises:
         ValueError — jika jarak antar x tidak sama
@@ -54,59 +44,66 @@ def newton_forward(x, y, xp, verbose=False):
     n = len(x)
 
     # ── Validasi Equal Spacing ───────────────────────────────────────────────
-    # Newton Forward hanya valid jika semua jarak h = x_{i+1} - x_i sama.
-    # Toleransi 1e-9 untuk mengatasi floating-point rounding error.
+    # Toleransi 1e-9 untuk menangani floating-point rounding error.
     h = x[1] - x[0]
     for i in range(1, n - 1):
         if abs((x[i + 1] - x[i]) - h) > 1e-9:
             raise ValueError("x harus berjarak sama (equal spacing)")
 
-    # ── Bangun Tabel Selisih Maju ────────────────────────────────────────────
-    # Tabel ini berisi kolom Δ^0, Δ^1, Δ^2, ..., Δ^(n-1)
-    # Kolom Δ^0 = y itu sendiri
-    df, table = forward_difference_table(x, y)
+    # ── Bangun Tabel Selisih Mundur ──────────────────────────────────────────
+    # table[0] = salinan y asli (orde 0)
+    # table[k] = list selisih mundur orde ke-k, panjang = n - k
+    #
+    # Rumus: ∇^k y[j] = ∇^(k-1) y[j] - ∇^(k-1) y[j-1]
+    # j berjalan dari 1 s/d len(prev)-1 (butuh elemen j dan j-1).
+    #
+    # Contoh untuk n=3, y=[6,5,4]:
+    #   table[0] = [6, 5, 4]
+    #   table[1] = [5-6, 4-5] = [-1, -1]
+    #   table[2] = [-1-(-1)]  = [0]
+
+    table = [list(y)]
+    for k in range(1, n):
+        prev = table[k - 1]
+        col  = [prev[j] - prev[j - 1] for j in range(1, len(prev))]
+        table.append(col)
 
     # ── Hitung Parameter u ───────────────────────────────────────────────────
-    # u adalah "posisi relatif" xp terhadap x0, diskalakan dengan h
-    # u = 0 berarti xp tepat di x0; u = 1 berarti xp di x1; dst.
-    u = (xp - x[0]) / h
+    # u diukur dari titik TERAKHIR (xn).
+    # u negatif jika xp berada sebelum xn.
+    u = (xp - x[-1]) / h
 
-    # ── Evaluasi Polinom Newton Forward ─────────────────────────────────────
-    result = y[0]          # suku pertama: y0
-    u_term = 1             # akumulator produk: u * (u-1) * (u-2) * ...
-    fact = 1               # akumulator faktorial: k!
+    # ── Evaluasi Polinom Newton Backward ─────────────────────────────────────
+    result = y[-1]   # mulai dari yn
+    u_term = 1       # akumulator produk u*(u+1)*(u+2)*...
+    fact   = 1       # akumulator faktorial k!
 
     if verbose:
         print("\n" + "=" * 45)
-        print("  LANGKAH PERHITUNGAN - Newton Forward")
+        print("  LANGKAH PERHITUNGAN - Newton Backward")
         print("=" * 45)
-        print(f"  h     = {h}  ← jarak antar titik x")
-        print(f"  u     = (x - x0) / h = ({xp} - {x[0]}) / {h} = {u:.6f}")
-        print(f"  y0    = {y[0]}  ← nilai awal f(x0)")
+        print(f"  h     = {h}  <- jarak antar titik x")
+        print(f"  u     = (xp - xn) / h = ({xp} - {x[-1]}) / {h} = {u:.6f}")
+        print(f"  yn    = {y[-1]}  <- nilai f(xn)")
         print("-" * 45)
 
-    for i in range(1, n):
-        # Suku ke-i dari polinom Newton Forward:
-        # u * (u-1) * ... * (u-(i-1)) / i! * Δ^i y0
+    for k in range(1, n):
+        # Suku ke-k: [u(u+1)...(u+k-1) / k!] * nabla^k yn
+        # Tanda PLUS pada (u + k - 1) — berbeda dari Forward yang MINUS
 
-        # Update u_term: kalikan dengan (u - (i-1))
-        u_term *= (u - (i - 1))
+        u_term *= (u + (k - 1))
+        fact   *= k
 
-        # Update faktorial: i!
-        fact *= i
-
-        # Ambil Δ^i y0 dari kolom ke-i tabel selisih maju (baris pertama = indeks 0)
-        delta = table[i][0]
-
-        # Kontribusi suku ke-i ke hasil interpolasi
+        # nabla^k yn = elemen TERAKHIR dari table[k]
+        delta   = table[k][-1]
         contrib = (u_term * delta) / fact
         result += contrib
 
         if verbose:
-            print(f"  Iterasi {i}:")
-            print(f"    u_term  = {u_term:.6f}  ← u(u-1)...(u-{i-1})")
-            print(f"    Δ^{i}y0  = {delta:.6f}  ← dari tabel selisih maju")
-            print(f"    {i}!      = {fact}")
+            print(f"  Iterasi {k}:")
+            print(f"    u_term     = {u_term:.6f}")
+            print(f"    nabla^{k}yn = {delta:.6f}")
+            print(f"    {k}!         = {fact}")
             print(f"    Kontribusi = {contrib:.6f}")
             print(f"    Akumulasi  = {result:.6f}")
             print()
@@ -116,4 +113,4 @@ def newton_forward(x, y, xp, verbose=False):
         print(f"  HASIL AKHIR: P({xp}) = {result:.6f}")
         print("=" * 45)
 
-    return result, df
+    return result
