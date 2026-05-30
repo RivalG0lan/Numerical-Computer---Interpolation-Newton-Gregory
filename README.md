@@ -234,10 +234,20 @@ Possible future enhancements include:
 Developed as a Numerical Computing course project.
 
 Team Members:
-
-* Rivaldo Nainggolan
-* Member 2
-* Member 3
+* 241712003 - Sultan tri Ananda (Coders)
+* 241712006 - Parida Lubis
+* 241712009 - Maulia Revani Putri
+* 241712012 - Ruth Angelia sihombing
+* 241712015 - Auzan Taris
+* 241712018 - Dimas Surya darma
+* 241712021 - Ivana kristina
+* 241712024 - Adeptri sagala
+* 241712027 - M. Fikri ramadhan Sembiring (Coders)
+* 241712030 - Habil Rizky Tazir
+* 241712034 - Muhammad Ramadhan
+* 241712037 - Syaikhah Az-Zahra Nasir
+* 241712040 - Nadya putri Anggina siregar
+* 241712043 - Rivaldo Nainggolan (Coders)
 
 ---
 
